@@ -1,74 +1,31 @@
-public with sharing class GeocodeService {
+trigger AccountTrigger on Account (after insert, after update) {
     
-    // Nominatim (OpenStreetMap) API를 사용한 주소 지오코딩
-    @future(callout=true)
-    public static void geocodeOpportunities(Set<Id> opportunityIds) {
-        // 지오코딩할 Opportunity 조회
-        List<Opportunity> opportunities = [
-            SELECT Id, BillingStreet__c, Location__c, Geocoding_Status__c
-            FROM Opportunity
-            WHERE Id IN :opportunityIds
-            AND BillingStreet__c != null
-        ];
-        
-        List<Opportunity> oppsToUpdate = new List<Opportunity>();
-        
-        for (Opportunity opp : opportunities) {
-            try {
-                // Nominatim API 호출
-                HttpRequest req = new HttpRequest();
-                String endpoint = 'https://nominatim.openstreetmap.org/search';
-                String query = '?format=json&limit=1&countrycodes=kr'; // 한국으로 제한
-                query += '&q=' + EncodingUtil.urlEncode(opp.BillingStreet__c, 'UTF-8');
-                
-                req.setEndpoint(endpoint + query);
-                req.setMethod('GET');
-                req.setHeader('User-Agent', 'Salesforce Geocoding Service'); // Nominatim 필수
-                req.setTimeout(10000); // 10초 타임아웃
-                
-                Http http = new Http();
-                HttpResponse res = http.send(req);
-                
-                if (res.getStatusCode() == 200) {
-                    // 응답 파싱
-                    String responseBody = res.getBody();
-                    List<Object> results = (List<Object>) JSON.deserializeUntyped(responseBody);
-                    
-                    if (results != null && !results.isEmpty()) {
-                        Map<String, Object> firstResult = (Map<String, Object>) results[0];
-                        
-                        // 위도/경도 추출
-                        Decimal latitude = Decimal.valueOf((String) firstResult.get('lat'));
-                        Decimal longitude = Decimal.valueOf((String) firstResult.get('lon'));
-                        
-                        // Geolocation 필드 업데이트
-                        opp.Location__Latitude__s = latitude;
-                        opp.Location__Longitude__s = longitude;
-                        opp.Geocoding_Status__c = '성공';
-                        
-                        oppsToUpdate.add(opp);
-                    } else {
-                        // 결과 없음
-                        opp.Geocoding_Status__c = '실패';
-                        oppsToUpdate.add(opp);
-                    }
-                } else {
-                    // 기타 오류
-                    opp.Geocoding_Status__c = '실패'; // 지오코딩 상태 실패
-                    oppsToUpdate.add(opp);
-                }
-                
-            } catch (Exception e) {
-                opp.Geocoding_Status__c = '실패';// 지오코딩 상태 실패
-                oppsToUpdate.add(opp);
+    Set<Id> accountsToGeocode = new Set<Id>();
+    
+    if (Trigger.isInsert) {
+        for (Account acc : Trigger.new) {
+            // 도로명 주소가 있고 위치 정보가 없는 경우
+            if (acc.Account_BillingStreet__c != null && acc.Account_Location__c == null) {
+                accountsToGeocode.add(acc.Id);
             }
-        }
-        
-        // 업데이트 실행
-        if (!oppsToUpdate.isEmpty()) {
-            update oppsToUpdate;
         }
     }
     
+    if (Trigger.isUpdate) {
+        for (Account acc : Trigger.new) {
+            Account oldAcc = Trigger.oldMap.get(acc.Id);
+            
+            // 주소가 변경된 경우
+            Boolean addressChanged = (oldAcc.Account_BillingStreet__c != acc.Account_BillingStreet__c);
+            
+            if (acc.Account_BillingStreet__c != null && addressChanged) {
+                accountsToGeocode.add(acc.Id);
+            }
+        }
+    }
     
+    // 지오코딩 실행 (Future 메서드)
+    if (!accountsToGeocode.isEmpty() && !System.isFuture()) {
+        GeocodeService.geocodeAccounts(accountsToGeocode);
+    }
 }
