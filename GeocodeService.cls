@@ -29,9 +29,6 @@ public with sharing class GeocodeService {
                 Http http = new Http();
                 HttpResponse res = http.send(req);
                 
-                System.debug('Nominatim API 응답 코드: ' + res.getStatusCode());
-                System.debug('주소: ' + opp.BillingStreet__c);
-                
                 if (res.getStatusCode() == 200) {
                     // 응답 파싱
                     String responseBody = res.getBody();
@@ -50,30 +47,20 @@ public with sharing class GeocodeService {
                         opp.Geocoding_Status__c = '성공';
                         
                         oppsToUpdate.add(opp);
-                        
-                        System.debug('지오코딩 성공: ' + opp.BillingStreet__c + ' -> ' + latitude + ', ' + longitude);
                     } else {
                         // 결과 없음
                         opp.Geocoding_Status__c = '실패';
                         oppsToUpdate.add(opp);
-                        System.debug('주소를 찾을 수 없습니다: ' + opp.BillingStreet__c);
                     }
-                } else if (res.getStatusCode() == 429) {
-                    // Rate limit 초과
-                    opp.Geocoding_Status__c = '실패';
-                    oppsToUpdate.add(opp);
-                    System.debug('API 호출 제한 초과. 나중에 다시 시도하세요.');
                 } else {
                     // 기타 오류
-                    opp.Geocoding_Status__c = '실패';
+                    opp.Geocoding_Status__c = '실패'; // 지오코딩 상태 실패
                     oppsToUpdate.add(opp);
-                    System.debug('API 호출 실패. 상태 코드: ' + res.getStatusCode());
                 }
                 
             } catch (Exception e) {
-                opp.Geocoding_Status__c = '실패';
+                opp.Geocoding_Status__c = '실패';// 지오코딩 상태 실패
                 oppsToUpdate.add(opp);
-                System.debug('지오코딩 중 오류 발생: ' + e.getMessage());
             }
         }
         
@@ -83,45 +70,5 @@ public with sharing class GeocodeService {
         }
     }
     
-    // 단일 주소 지오코딩 (LWC에서 호출용)
-    @AuraEnabled
-    public static Map<String, Decimal> geocodeSingleAddress(String address) {
-        if (String.isBlank(address)) {
-            throw new AuraHandledException('주소가 없습니다.');
-        }
-        
-        try {
-            HttpRequest req = new HttpRequest();
-            String endpoint = 'https://nominatim.openstreetmap.org/search';
-            String query = '?format=json&limit=1&countrycodes=kr';
-            query += '&q=' + EncodingUtil.urlEncode(address, 'UTF-8');
-            
-            req.setEndpoint(endpoint + query);
-            req.setMethod('GET');
-            req.setHeader('User-Agent', 'Salesforce Geocoding Service');
-            req.setTimeout(10000);
-            
-            Http http = new Http();
-            HttpResponse res = http.send(req);
-            
-            if (res.getStatusCode() == 200) {
-                List<Object> results = (List<Object>) JSON.deserializeUntyped(res.getBody());
-                
-                if (results != null && !results.isEmpty()) {
-                    Map<String, Object> firstResult = (Map<String, Object>) results[0];
-                    
-                    Map<String, Decimal> coordinates = new Map<String, Decimal>();
-                    coordinates.put('latitude', Decimal.valueOf((String) firstResult.get('lat')));
-                    coordinates.put('longitude', Decimal.valueOf((String) firstResult.get('lon')));
-                    
-                    return coordinates;
-                }
-            }
-            
-            throw new AuraHandledException('주소를 찾을 수 없습니다.');
-            
-        } catch (Exception e) {
-            throw new AuraHandledException('지오코딩 중 오류 발생: ' + e.getMessage());
-        }
-    }
+    
 }
