@@ -1,7 +1,9 @@
 ## 도로명 주소 -> 위도/경도 받아오기(Nominatim API 활용)
 <img width="404" alt="image" src="https://github.com/user-attachments/assets/ebfb6eca-ffeb-4532-b51a-447923ec6925" />
 
-#### Opportunity의 도로명 주소 필드가 입력/수정될때마다 Nominatim API 호출을 통해서 위도/경도 값을 받아서 위치(geolocation field)값을 수정합니다.
+#### Opportunity/Account 도로명 주소 필드가 입력/수정될때마다 GeocodeService 호출
+#### GeocodeService(geocodeAccounts/geocodeOpportunities)-> Nominatim API 호출을 통해서 위도/경도 값을 받아서 위치(geolocation field)값을 수정합니다.
+
 성공 여부에 따라서 지오코딩 상태 필드 업데이트(성공/대기중/실패)
 
 ### 1. 사용한 커스텀 필드
